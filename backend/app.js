@@ -1,25 +1,47 @@
-require('dotenv').config()
-const express = require('express')
-const cors = require('cors')
+require("dotenv").config()
+const express = require("express")
+const cors = require("cors")
 
 const app = express()
 
-// Middleware to parse JSON requests
+// Parse JSON first
 app.use(express.json())
 
-// CORS to allow frontend requests (adjust as needed)
-app.use(cors({
-    origin: 'http://localhost:3000', // your frontend URL
-    credentials: true,
-}))
+// Allow listed frontends (local + production)
+const allowedOrigins = [
+    "http://localhost:3000",                  // local Next.js
+    process.env.FRONTEND_ORIGIN,              // e.g. https://your-frontend.vercel.app
+].filter(Boolean)
 
-// Example health endpoint
-app.get('/', (req, res) => {
-    res.send('it works')
+// CORS config
+app.use(
+    cors({
+        origin(origin, cb) {
+            // Allow server-to-server, Postman, curl (no Origin header)
+            if (!origin) return cb(null, true)
+            if (allowedOrigins.includes(origin)) return cb(null, true)
+            return cb(new Error("Not allowed by CORS"))
+        },
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+        credentials: false, // set to true only if using cookies
+    })
+)
+
+// Optional: basic security headers
+app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff")
+    res.setHeader("X-Frame-Options", "DENY")
+    next()
 })
 
-// Mount your auth routes here (we'll create auth.js later)
-const authRoutes = require('./routes/auth')
-app.use('/api/auth', authRoutes)
+// Health endpoint
+app.get("/", (req, res) => {
+    res.json({ ok: true })
+})
+
+// Routes
+const authRoutes = require("./routes/auth")
+app.use("/api/auth", authRoutes)
 
 module.exports = app
