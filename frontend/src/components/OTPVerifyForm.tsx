@@ -39,8 +39,12 @@ export function OTPVerifyForm({ email }: OTPVerifyFormProps) {
 
             localStorage.setItem("token", data.token)
             router.push("/dashboard")
-        } catch (err: any) {
-            setError(err.message || "Unknown error")
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Unknown error")
+            }
         } finally {
             setIsLoading(false)
         }
