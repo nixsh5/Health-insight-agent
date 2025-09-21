@@ -4,9 +4,10 @@ import { z } from "zod"
 import * as React from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { signupSchema } from "@/lib/schemas" // import schema
+import { signupSchema } from "@/lib/schemas"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -22,6 +23,8 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
         formState: { errors, isSubmitting },
     } = useForm<SignupData>({ resolver: zodResolver(signupSchema) })
 
+    const router = useRouter()
+
     async function onSubmit(data: SignupData) {
         try {
             const response = await fetch("http://localhost:5000/api/auth/signup", {
@@ -34,16 +37,15 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
             if (!response.ok) {
                 throw new Error(result.message || "Failed to sign up")
             }
-            alert("Signup successful! Please login.")
-            window.location.href = "/login"
+            // Redirect to OTP verify page passing email as query parameter
+            router.push(`/otp-verify?email=${encodeURIComponent(data.email)}`)
         } catch (error: unknown) {
             if (error instanceof Error) {
-                alert(error.message);
+                alert(error.message)
             } else {
-                alert("An unknown error occurred");
+                alert("An unknown error occurred")
             }
         }
-
     }
 
     return (
@@ -67,20 +69,29 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
 
                             <div className="grid gap-3">
                                 <Label htmlFor="email">Email</Label>
-                                <Input id="email" type="email" {...register("email")} placeholder="m@example.com" />
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    {...register("email")}
+                                    placeholder="m@example.com"
+                                />
                                 {errors.email && <p className="text-red-500 text-xs">{errors.email.message}</p>}
                             </div>
 
                             <div className="grid gap-3">
                                 <Label htmlFor="password">Password</Label>
                                 <Input id="password" type="password" {...register("password")} />
-                                {errors.password && <p className="text-red-500 text-xs">{errors.password.message}</p>}
+                                {errors.password && (
+                                    <p className="text-red-500 text-xs">{errors.password.message}</p>
+                                )}
                             </div>
 
                             <div className="grid gap-3">
                                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                                 <Input id="confirmPassword" type="password" {...register("confirmPassword")} />
-                                {errors.confirmPassword && <p className="text-red-500 text-xs">{errors.confirmPassword.message}</p>}
+                                {errors.confirmPassword && (
+                                    <p className="text-red-500 text-xs">{errors.confirmPassword.message}</p>
+                                )}
                             </div>
 
                             <Button type="submit" className="w-full" disabled={isSubmitting}>

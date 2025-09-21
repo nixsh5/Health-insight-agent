@@ -4,44 +4,43 @@ const cors = require("cors")
 
 const app = express()
 
-// Parse JSON first
 app.use(express.json())
 
-// Allow listed frontends (local + production)
 const allowedOrigins = [
-    "http://localhost:3000",                  // local Next.js
-    process.env.FRONTEND_ORIGIN,              // e.g. https://your-frontend.vercel.app
+    "http://localhost:3000",          // local dev frontend
+    process.env.FRONTEND_ORIGIN       // production frontend domain from env var
 ].filter(Boolean)
 
-// CORS config
 app.use(
     cors({
         origin(origin, cb) {
-            // Allow server-to-server, Postman, curl (no Origin header)
-            if (!origin) return cb(null, true)
+            if (!origin) return cb(null, true) // allow non-browser requests
             if (allowedOrigins.includes(origin)) return cb(null, true)
             return cb(new Error("Not allowed by CORS"))
         },
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
-        credentials: false, // set to true only if using cookies
+        credentials: false, // change to true only if using cookies
     })
 )
 
-// Optional: basic security headers
+// Optional security headers
 app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff")
     res.setHeader("X-Frame-Options", "DENY")
     next()
 })
 
-// Health endpoint
+// Health check endpoint
 app.get("/", (req, res) => {
     res.json({ ok: true })
 })
 
-// Routes
+// Import and mount auth routes
 const authRoutes = require("./routes/auth")
 app.use("/api/auth", authRoutes)
+
+// Fallback for unmatched routes
+app.use((req, res) => res.status(404).json({ message: "Route not found" }))
 
 module.exports = app

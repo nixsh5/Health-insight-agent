@@ -14,10 +14,7 @@ interface LoginData {
     password: string
 }
 
-export function LoginForm({
-                              className,
-                              ...props
-                          }: React.ComponentProps<"div">) {
+export function LoginForm({className, ...props}: React.ComponentProps<"div">) {
     const {
         register,
         handleSubmit,
