@@ -1,12 +1,12 @@
 "use client"
 
+import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { OTPVerifyForm } from "@/components/OTPVerifyForm"
 import Image from "next/image"
-import * as React from "react"
 
-export default function OtpVerifyPage() {
+function OtpContent() {
     const searchParams = useSearchParams()
     const email = searchParams.get("email") || ""
 
@@ -14,7 +14,6 @@ export default function OtpVerifyPage() {
         <div className="min-h-screen flex items-center justify-center bg-muted">
             <Card className="w-full max-w-md p-0 overflow-hidden bg-card/80 backdrop-blur">
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 p-0">
-                    {/* Left side with OTP form */}
                     <div className="p-6 md:p-8 flex flex-col gap-6">
                         <div className="text-center mb-4">
                             <h1 className="text-2xl font-bold">Verify Your Email</h1>
@@ -22,11 +21,8 @@ export default function OtpVerifyPage() {
                                 Enter the OTP sent to <br /> <strong>{email}</strong>
                             </p>
                         </div>
-
                         <OTPVerifyForm email={email} />
                     </div>
-
-                    {/* Right side image */}
                     <div className="hidden md:block relative">
                         <Image
                             src="/2.jpg"
@@ -39,5 +35,13 @@ export default function OtpVerifyPage() {
                 </CardContent>
             </Card>
         </div>
+    )
+}
+
+export default function OtpVerifyPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+            <OtpContent />
+        </Suspense>
     )
 }
