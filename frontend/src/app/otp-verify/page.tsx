@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { OTPVerifyForm } from "@/components/OTPVerifyForm"
+import Image from "next/image"
 import * as React from "react"
 
 export default function OtpVerifyPage() {
@@ -27,7 +28,13 @@ export default function OtpVerifyPage() {
 
                     {/* Right side image */}
                     <div className="hidden md:block relative">
-
+                        <Image
+                            src="/2.jpg"
+                            alt="Verification Image"
+                            fill
+                            className="object-cover dark:brightness-[0.3] dark:grayscale"
+                            priority
+                        />
                     </div>
                 </CardContent>
             </Card>
