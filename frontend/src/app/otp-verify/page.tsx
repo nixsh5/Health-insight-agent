@@ -2,7 +2,6 @@
 
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
-import Image from "next/image"
 import { OTPVerifyForm } from "@/components/OTPVerifyForm"
 import * as React from "react"
 
