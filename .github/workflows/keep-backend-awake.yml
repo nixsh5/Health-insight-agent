@@ -1,0 +1,13 @@
+name: Keep Backend Awake
+
+on:
+  schedule:
+    - cron: '*/12 * * * *'  # every 12 minutes
+  workflow_dispatch: # manual trigger as well
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend URL
+        run: curl -fsS --retry 3 https://project-0tv2.onrender.com || exit 1
