@@ -38,7 +38,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                 throw new Error(result.message || "Failed to sign up")
             }
             // Redirect to OTP verify page passing email as query parameter
-            router.push(`/otp-verify?email=${encodeURIComponent(data.email)}`)
+            router.push("/dashboard")
         } catch (error: unknown) {
             if (error instanceof Error) {
                 alert(error.message)
