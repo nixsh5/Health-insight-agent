@@ -27,7 +27,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
 
     async function onSubmit(data: SignupData) {
         try {
-            const response = await fetch("https://project-0tv2.onrender.com", {
+            const response = await fetch("https://project-0tv2.onrender.com/api/auth/signup", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
