@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { Label } from "@/components/ui/label"
 
 interface LoginData {
@@ -21,6 +22,8 @@ export function LoginForm({className, ...props}: React.ComponentProps<"div">) {
         formState: { errors, isSubmitting },
     } = useForm<LoginData>()
 
+    const router = useRouter()
+
     async function onSubmit(data: LoginData) {
         try {
             const res = await fetch("https://project-0tv2.onrender.com/api/auth/login", {
@@ -33,7 +36,7 @@ export function LoginForm({className, ...props}: React.ComponentProps<"div">) {
 
             // Save token to localStorage (or any state management solution)
             localStorage.setItem("token", json.token)
-            alert("Login successful!")
+            router.push("/dashboard")
             // Optionally redirect or update app state here
         } catch (error: unknown) {
             if (error instanceof Error) {
