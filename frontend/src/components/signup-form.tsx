@@ -57,7 +57,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                             <div className="flex flex-col items-center text-center">
                                 <h1 className="text-2xl font-bold">Create an account</h1>
                                 <p className="text-muted-foreground text-balance">
-                                    Sign up for a new ProjectXYZ account
+                                    Sign up for a new Pulselyx account
                                 </p>
                             </div>
 
