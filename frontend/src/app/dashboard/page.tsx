@@ -56,7 +56,7 @@ export default function Page() {
         // Clear the auth cookie on the server
         await fetch("/api/logout", { method: "POST" })
         // Send user to login; middleware will then block /dashboard
-        router.push("/login")
+        router.push("/")
     }
 
     return (

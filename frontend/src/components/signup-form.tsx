@@ -16,6 +16,9 @@ import Image from "next/image"
 
 export type SignupData = z.infer<typeof signupSchema>
 
+type SignupOk = { ok: true } | { signedUp: true; needsLogin: true }
+type SignupError = { message?: string }
+
 export function SignupForm({ className, ...props }: React.ComponentProps<"div">) {
     const {
         register,
@@ -27,18 +30,31 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
 
     async function onSubmit(data: SignupData) {
         try {
-            const response = await fetch("https://project-0tv2.onrender.com/api/auth/signup", {
+            const response = await fetch("/api/signup", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
             })
 
-            const result = await response.json()
+            const result = (await response.json().catch(() => ({}))) as SignupOk | SignupError
+
             if (!response.ok) {
-                throw new Error(result.message || "Failed to sign up")
+                const msg =
+                    (result as SignupError)?.message && typeof (result as SignupError).message === "string"
+                        ? (result as SignupError).message!
+                        : "Failed to sign up"
+                throw new Error(msg)
             }
-            // Redirect to OTP verify page passing email as query parameter
-            router.push("/dashboard")
+
+            // If backend didn't issue a token and our API replied with needsLogin
+            if ("needsLogin" in (result as any)) {
+                router.push("/login")
+                return
+            }
+
+            // Cookie set successfully by /api/signup; go to dashboard
+            // Small delay can avoid rare cookie write race on some deployments
+            setTimeout(() => router.push("/dashboard"), 50)
         } catch (error: unknown) {
             if (error instanceof Error) {
                 alert(error.message)
@@ -69,21 +85,14 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
 
                             <div className="grid gap-3">
                                 <Label htmlFor="email">Email</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    {...register("email")}
-                                    placeholder="m@example.com"
-                                />
+                                <Input id="email" type="email" {...register("email")} placeholder="m@example.com" />
                                 {errors.email && <p className="text-red-500 text-xs">{errors.email.message}</p>}
                             </div>
 
                             <div className="grid gap-3">
                                 <Label htmlFor="password">Password</Label>
                                 <Input id="password" type="password" {...register("password")} />
-                                {errors.password && (
-                                    <p className="text-red-500 text-xs">{errors.password.message}</p>
-                                )}
+                                {errors.password && <p className="text-red-500 text-xs">{errors.password.message}</p>}
                             </div>
 
                             <div className="grid gap-3">

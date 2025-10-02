@@ -3,7 +3,7 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { useForm } from "react-hook-form"
+import { useForm, FieldErrors, FieldValues } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,9 @@ interface LoginData {
     email: string
     password: string
 }
+
+type ApiOk = { ok: true }
+type ApiError = { message?: string }
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
     const {
@@ -28,29 +31,41 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
 
     async function onSubmit(data: LoginData) {
         try {
-            // Post to your Next.js API route so it can set an HttpOnly cookie (auth_token)
             const res = await fetch("/api/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
             })
 
-            // Try parse JSON for error detail if any
-            const json = await res.json().catch(() => ({} as any))
+            // Try to parse JSON but keep it typed
+            const json = (await res.json().catch(() => ({}))) as ApiOk | ApiError
 
             if (!res.ok) {
-                const message = json?.message || "Login failed"
+                const message =
+                    (json as ApiError)?.message && typeof (json as ApiError).message === "string"
+                        ? (json as ApiError).message!
+                        : "Login failed"
                 setError("root", { message })
                 return
             }
 
-            // No need to use localStorage; cookie is set by the API route.
-            // Navigate to dashboard; middleware will now allow it.
             router.push("/dashboard")
         } catch (err) {
             const message = err instanceof Error ? err.message : "Unexpected error"
             setError("root", { message })
         }
+    }
+
+    // Helper to render root error without using any
+    function RootError({
+                           formErrors,
+                       }: {
+        formErrors: FieldErrors<FieldValues>
+    }) {
+        const rootMsg =
+            (formErrors as FieldErrors<LoginData> & { root?: { message?: string } }).root?.message
+        if (!rootMsg) return null
+        return <p className="text-red-500 text-xs">{rootMsg}</p>
     }
 
     return (
@@ -74,7 +89,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                                     placeholder="m@example.com"
                                     {...register("email", { required: "Email is required" })}
                                 />
-                                {errors.email && (
+                                {"email" in errors && errors.email && (
                                     <p className="text-red-500 text-xs">{errors.email.message}</p>
                                 )}
                             </div>
@@ -82,10 +97,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                             <div className="grid gap-3">
                                 <div className="flex items-center">
                                     <Label htmlFor="password">Password</Label>
-                                    <a
-                                        href="#"
-                                        className="ml-auto text-sm underline-offset-2 hover:underline"
-                                    >
+                                    <a href="#" className="ml-auto text-sm underline-offset-2 hover:underline">
                                         Forgot your password?
                                     </a>
                                 </div>
@@ -94,17 +106,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                                     type="password"
                                     {...register("password", { required: "Password is required" })}
                                 />
-                                {errors.password && (
+                                {"password" in errors && errors.password && (
                                     <p className="text-red-500 text-xs">{errors.password.message}</p>
                                 )}
                             </div>
 
-                            {/* Root-level form error (from server) */}
-                            {"root" in errors && (errors as any).root?.message && (
-                                <p className="text-red-500 text-xs">
-                                    {(errors as any).root.message}
-                                </p>
-                            )}
+                            <RootError formErrors={errors as FieldErrors<FieldValues>} />
 
                             <Button type="submit" className="w-full" disabled={isSubmitting}>
                                 {isSubmitting ? "Logging in..." : "Login"}
@@ -115,12 +122,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                             </div>
 
                             <div>
-                                <Button
-                                    variant="outline"
-                                    type="button"
-                                    className="w-full"
-                                    aria-label="Login with Google"
-                                >
+                                <Button variant="outline" type="button" className="w-full" aria-label="Login with Google">
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         viewBox="0 0 24 24"
@@ -128,7 +130,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                                         className="h-4 w-4"
                                     >
                                         <path
-                                            d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
+                                            d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.53-1.467-.173-2.053H12.48z"
                                             fill="currentColor"
                                         />
                                     </svg>
