@@ -24,8 +24,8 @@ const data = {
       url: "#",
       items: [
         {
-          title: "Installation",
-          url: "#",
+          title: "Logout",
+          url: "",
         },
         {
           title: "Project Structure",

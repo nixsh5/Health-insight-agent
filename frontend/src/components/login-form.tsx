@@ -1,3 +1,4 @@
+// src/components/login-form.tsx
 "use client"
 
 import * as React from "react"
@@ -15,38 +16,43 @@ interface LoginData {
     password: string
 }
 
-export function LoginForm({className, ...props}: React.ComponentProps<"div">) {
+export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
     const {
         register,
         handleSubmit,
         formState: { errors, isSubmitting },
+        setError,
     } = useForm<LoginData>()
 
     const router = useRouter()
 
     async function onSubmit(data: LoginData) {
         try {
-            const res = await fetch("https://project-0tv2.onrender.com/api/auth/login", {
+            // Post to your Next.js API route so it can set an HttpOnly cookie (auth_token)
+            const res = await fetch("/api/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
             })
-            const json = await res.json()
-            if (!res.ok) throw new Error(json.message || "Login failed")
 
-            // Save token to localStorage (or any state management solution)
-            localStorage.setItem("token", json.token)
-            router.push("/dashboard")
-            // Optionally redirect or update app state here
-        } catch (error: unknown) {
-            if (error instanceof Error) {
-                alert(error.message);
-            } else {
-                alert("An unknown error occurred");
+            // Try parse JSON for error detail if any
+            const json = await res.json().catch(() => ({} as any))
+
+            if (!res.ok) {
+                const message = json?.message || "Login failed"
+                setError("root", { message })
+                return
             }
-        }
 
+            // No need to use localStorage; cookie is set by the API route.
+            // Navigate to dashboard; middleware will now allow it.
+            router.push("/dashboard")
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Unexpected error"
+            setError("root", { message })
+        }
     }
+
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card className="overflow-hidden bg-card/80 backdrop-blur p-0">
@@ -59,6 +65,7 @@ export function LoginForm({className, ...props}: React.ComponentProps<"div">) {
                                     Login to your Pulselyx account
                                 </p>
                             </div>
+
                             <div className="grid gap-3">
                                 <Label htmlFor="email">Email</Label>
                                 <Input
@@ -67,12 +74,18 @@ export function LoginForm({className, ...props}: React.ComponentProps<"div">) {
                                     placeholder="m@example.com"
                                     {...register("email", { required: "Email is required" })}
                                 />
-                                {errors.email && <p className="text-red-500 text-xs">{errors.email.message}</p>}
+                                {errors.email && (
+                                    <p className="text-red-500 text-xs">{errors.email.message}</p>
+                                )}
                             </div>
+
                             <div className="grid gap-3">
                                 <div className="flex items-center">
                                     <Label htmlFor="password">Password</Label>
-                                    <a href="#" className="ml-auto text-sm underline-offset-2 hover:underline">
+                                    <a
+                                        href="#"
+                                        className="ml-auto text-sm underline-offset-2 hover:underline"
+                                    >
                                         Forgot your password?
                                     </a>
                                 </div>
@@ -85,12 +98,22 @@ export function LoginForm({className, ...props}: React.ComponentProps<"div">) {
                                     <p className="text-red-500 text-xs">{errors.password.message}</p>
                                 )}
                             </div>
+
+                            {/* Root-level form error (from server) */}
+                            {"root" in errors && (errors as any).root?.message && (
+                                <p className="text-red-500 text-xs">
+                                    {(errors as any).root.message}
+                                </p>
+                            )}
+
                             <Button type="submit" className="w-full" disabled={isSubmitting}>
                                 {isSubmitting ? "Logging in..." : "Login"}
                             </Button>
+
                             <div className="after:border-border relative text-center text-sm">
                                 <span className="bg-card/0 relative z-10 px-2">Or continue with</span>
                             </div>
+
                             <div>
                                 <Button
                                     variant="outline"

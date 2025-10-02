@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import {
@@ -49,6 +50,15 @@ function ModeToggle() {
 }
 
 export default function Page() {
+    const router = useRouter()
+
+    async function handleLogout() {
+        // Clear the auth cookie on the server
+        await fetch("/api/logout", { method: "POST" })
+        // Send user to login; middleware will then block /dashboard
+        router.push("/login")
+    }
+
     return (
         <SidebarProvider>
             <AppSidebar />
@@ -76,7 +86,12 @@ export default function Page() {
                     </div>
 
                     {/* Right side of header */}
-                    <ModeToggle />
+                    <div className="flex items-center gap-2">
+                        <ModeToggle />
+                        <Button variant="destructive" onClick={handleLogout}>
+                            Logout
+                        </Button>
+                    </div>
                 </header>
 
                 <div className="flex flex-1 flex-col gap-4 p-4">
