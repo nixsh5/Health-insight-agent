@@ -16,8 +16,19 @@ import Image from "next/image"
 
 export type SignupData = z.infer<typeof signupSchema>
 
-type SignupOk = { ok: true } | { signedUp: true; needsLogin: true }
+type SignupOkDirect = { ok: true }               // cookie set; can go to dashboard
+type SignupOkNeedsLogin = { signedUp: true; needsLogin: true } // fallback
+type SignupSuccess = SignupOkDirect | SignupOkNeedsLogin
 type SignupError = { message?: string }
+
+function isNeedsLogin(payload: unknown): payload is SignupOkNeedsLogin {
+    return (
+        typeof payload === "object" &&
+        payload !== null &&
+        "signedUp" in payload &&
+        "needsLogin" in payload
+    )
+}
 
 export function SignupForm({ className, ...props }: React.ComponentProps<"div">) {
     const {
@@ -36,24 +47,26 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                 body: JSON.stringify(data),
             })
 
-            const result = (await response.json().catch(() => ({}))) as SignupOk | SignupError
+            const result: unknown = await response.json().catch(() => ({}))
 
             if (!response.ok) {
                 const msg =
-                    (result as SignupError)?.message && typeof (result as SignupError).message === "string"
+                    typeof result === "object" &&
+                    result !== null &&
+                    "message" in result &&
+                    typeof (result as SignupError).message === "string"
                         ? (result as SignupError).message!
                         : "Failed to sign up"
                 throw new Error(msg)
             }
 
-            // If backend didn't issue a token and our API replied with needsLogin
-            if ("needsLogin" in (result as any)) {
+            // Successful response: either cookie already set, or needsLogin fallback
+            if (isNeedsLogin(result)) {
                 router.push("/login")
                 return
             }
 
-            // Cookie set successfully by /api/signup; go to dashboard
-            // Small delay can avoid rare cookie write race on some deployments
+            // Cookie set; navigate to dashboard
             setTimeout(() => router.push("/dashboard"), 50)
         } catch (error: unknown) {
             if (error instanceof Error) {
