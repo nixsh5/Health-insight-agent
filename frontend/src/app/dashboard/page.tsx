@@ -28,35 +28,84 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-// Theme toggle button (shadcn)
-function ModeToggle() {
-    const { setTheme } = useTheme()
+import { IconPlus } from "@tabler/icons-react"
+import { ArrowUpIcon } from "lucide-react"
 
-    return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                    <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-                    <Moon className="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-                    <span className="sr-only">Toggle theme</span>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
-    )
-}
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupButton,
+    InputGroupTextarea,
+    InputGroupText,
+} from "@/components/ui/input-group"
 
 export default function Page() {
+    const { setTheme } = useTheme()
     const router = useRouter()
 
+    const [text, setText] = React.useState("")
+    const [file, setFile] = React.useState<File | null>(null)
+    const [error, setError] = React.useState<string | null>(null)
+
+    const fileInputRef = React.useRef<HTMLInputElement>(null)
+
     async function handleLogout() {
-        // Clear the auth cookie on the server
         await fetch("/api/logout", { method: "POST" })
-        // Send user to login; middleware will then block /dashboard
         router.push("/")
+    }
+
+    function ModeToggle() {
+        return (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon">
+                        <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+                        <Moon className="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+                        <span className="sr-only">Toggle theme</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        )
+    }
+
+    function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+        setError(null)
+        const selected = e.target.files?.[0] ?? null
+        if (selected && selected.type !== "application/pdf") {
+            setError("Only PDF files are allowed.")
+            setFile(null)
+            e.target.value = ""
+            return
+        }
+        setFile(selected)
+    }
+
+    function trySend() {
+        if (!text.trim() && !file) {
+            setError("Please enter text or attach a PDF file before sending.")
+            return
+        }
+        setError(null)
+
+        // TODO: integrate your sending logic
+        console.log("Sending text:", text)
+        console.log("Sending file:", file)
+
+        // Reset inputs after send
+        setText("")
+        setFile(null)
+        if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+
+    function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault()
+            trySend()
+        }
     }
 
     return (
@@ -66,16 +115,11 @@ export default function Page() {
                 <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 justify-between">
                     <div className="flex items-center gap-2">
                         <SidebarTrigger className="-ml-1" />
-                        <Separator
-                            orientation="vertical"
-                            className="mr-2 data-[orientation=vertical]:h-4"
-                        />
+                        <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
                         <Breadcrumb>
                             <BreadcrumbList>
                                 <BreadcrumbItem className="hidden md:block">
-                                    <BreadcrumbLink href="#">
-                                        Building Your Application
-                                    </BreadcrumbLink>
+                                    <BreadcrumbLink href="#">Building Your Application</BreadcrumbLink>
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block" />
                                 <BreadcrumbItem>
@@ -84,8 +128,6 @@ export default function Page() {
                             </BreadcrumbList>
                         </Breadcrumb>
                     </div>
-
-                    {/* Right side of header */}
                     <div className="flex items-center gap-2">
                         <ModeToggle />
                         <Button variant="destructive" onClick={handleLogout}>
@@ -94,21 +136,65 @@ export default function Page() {
                     </div>
                 </header>
 
-                <div className="flex flex-1 flex-col gap-4 p-4">
-                    <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                    </div>
-                    <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                    </div>
-                    <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
-                        <div className="bg-muted/50 aspect-video rounded-xl" />
+                <div className="flex-1 flex flex-col gap-4 p-4 pb-32 relative">
+                    {/* Your dashboard content (messages, etc) goes here */}
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 pb-4 flex justify-center pointer-events-none">
+                    <div className="w-full max-w-2xl pointer-events-auto">
+                        <InputGroup>
+                            <InputGroupTextarea
+                                placeholder="Ask, Search or Chat..."
+                                className="w-full"
+                                value={text}
+                                onChange={(e) => setText(e.target.value)}
+                                onKeyDown={onKeyDown}
+                                rows={2}
+                            />
+                            <InputGroupAddon align="block-end">
+                                <InputGroupButton
+                                    variant="outline"
+                                    className="rounded-full"
+                                    size="icon-xs"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    title="Attach PDF"
+                                >
+                                    <IconPlus />
+                                </InputGroupButton>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="application/pdf"
+                                    className="hidden"
+                                    onChange={onFileChange}
+                                />
+                                {file && (
+                                    <InputGroupText className="ml-2 max-w-[10ch] truncate">{file.name}</InputGroupText>
+                                )}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <InputGroupButton variant="ghost">Auto</InputGroupButton>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent side="top" align="start" className="[--radius:0.95rem]">
+                                        <DropdownMenuItem>Auto</DropdownMenuItem>
+                                        <DropdownMenuItem>Agent</DropdownMenuItem>
+                                        <DropdownMenuItem>Manual</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                <Separator orientation="vertical" className="!h-4" />
+                                <InputGroupButton
+                                    variant="default"
+                                    className="rounded-full"
+                                    size="icon-xs"
+                                    onClick={trySend}
+                                    title="Send"
+                                >
+                                    <ArrowUpIcon />
+                                    <span className="sr-only">Send</span>
+                                </InputGroupButton>
+                            </InputGroupAddon>
+                        </InputGroup>
+                        {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
                     </div>
                 </div>
             </SidebarInset>
