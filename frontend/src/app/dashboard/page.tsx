@@ -75,6 +75,25 @@ export default function Page() {
         setFile(selected)
     }
 
+    async function extractPdfText(pdfFile: File): Promise<string> {
+        const pdfjsLib = await import("pdfjs-dist")
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs"
+
+        const arrayBuf = await pdfFile.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise
+
+        let fullText = ""
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum)
+            const content = await page.getTextContent()
+            const strings = content.items.map((item: { str?: string }) => item.str || "")
+            fullText += strings.join(" ") + "\n"
+        }
+        return fullText.trim()
+    }
+
     async function trySend() {
         if (!text.trim() && !file) {
             setError("Please enter text or attach a PDF file before sending.")
@@ -85,11 +104,15 @@ export default function Page() {
         setResponseText("")
 
         try {
-            // Minimal prototype: send only the query text, no PDF parsing
+            let extracted = ""
+            if (file) {
+                extracted = await extractPdfText(file)
+            }
+
             const resp = await fetch("/api/ai/chat-with-pdf", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: text.trim(), text: "" }),
+                body: JSON.stringify({ query: text.trim(), text: extracted }),
             })
 
             const data = await resp.json()
@@ -107,12 +130,12 @@ export default function Page() {
 
             setResponseText(answer)
 
-            // Reset inputs after send
             setText("")
             setFile(null)
             if (fileInputRef.current) fileInputRef.current.value = ""
-        } catch (e: any) {
-            setError(e.message || "Unexpected error")
+        } catch (e) {
+            const error = e as Error
+            setError(error.message || "Unexpected error")
         } finally {
             setLoading(false)
         }
@@ -154,8 +177,7 @@ export default function Page() {
                 </header>
 
                 <div className="flex-1 flex flex-col gap-4 p-4 pb-32 relative">
-                    {/* Optional: show the latest model reply */}
-                    {loading && <p className="text-sm text-muted-foreground">Sending...</p>}
+                    {loading && <p className="text-sm text-muted-foreground">Processing...</p>}
                     {error && <p className="text-sm text-red-600">{error}</p>}
                     {responseText && (
                         <div className="rounded-md border p-3 whitespace-pre-wrap">
