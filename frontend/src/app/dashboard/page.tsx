@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun, ArrowUpIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useRouter } from "next/navigation"
 
@@ -15,21 +15,10 @@ import {
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
-import {
-    SidebarInset,
-    SidebarProvider,
-    SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { IconPlus } from "@tabler/icons-react"
-import { ArrowUpIcon } from "lucide-react"
 
 import {
     InputGroup,
@@ -46,6 +35,8 @@ export default function Page() {
     const [text, setText] = React.useState("")
     const [file, setFile] = React.useState<File | null>(null)
     const [error, setError] = React.useState<string | null>(null)
+    const [loading, setLoading] = React.useState(false)
+    const [responseText, setResponseText] = React.useState<string>("")
 
     const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -84,27 +75,53 @@ export default function Page() {
         setFile(selected)
     }
 
-    function trySend() {
+    async function trySend() {
         if (!text.trim() && !file) {
             setError("Please enter text or attach a PDF file before sending.")
             return
         }
         setError(null)
+        setLoading(true)
+        setResponseText("")
 
-        // TODO: integrate your sending logic
-        console.log("Sending text:", text)
-        console.log("Sending file:", file)
+        try {
+            // Minimal prototype: send only the query text, no PDF parsing
+            const resp = await fetch("/api/ai/chat-with-pdf", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: text.trim(), text: "" }),
+            })
 
-        // Reset inputs after send
-        setText("")
-        setFile(null)
-        if (fileInputRef.current) fileInputRef.current.value = ""
+            const data = await resp.json()
+            if (!resp.ok) {
+                setError(data.message || "Request failed")
+                return
+            }
+
+            const answer =
+                typeof data === "string"
+                    ? data
+                    : Array.isArray(data)
+                        ? (data[0]?.generated_text || JSON.stringify(data))
+                        : data.generated_text || data.answer || JSON.stringify(data)
+
+            setResponseText(answer)
+
+            // Reset inputs after send
+            setText("")
+            setFile(null)
+            if (fileInputRef.current) fileInputRef.current.value = ""
+        } catch (e: any) {
+            setError(e.message || "Unexpected error")
+        } finally {
+            setLoading(false)
+        }
     }
 
     function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
-            trySend()
+            void trySend()
         }
     }
 
@@ -137,7 +154,14 @@ export default function Page() {
                 </header>
 
                 <div className="flex-1 flex flex-col gap-4 p-4 pb-32 relative">
-                    {/* Your dashboard content (messages, etc) goes here */}
+                    {/* Optional: show the latest model reply */}
+                    {loading && <p className="text-sm text-muted-foreground">Sending...</p>}
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    {responseText && (
+                        <div className="rounded-md border p-3 whitespace-pre-wrap">
+                            {responseText}
+                        </div>
+                    )}
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 pb-4 flex justify-center pointer-events-none">
@@ -168,9 +192,7 @@ export default function Page() {
                                     className="hidden"
                                     onChange={onFileChange}
                                 />
-                                {file && (
-                                    <InputGroupText className="ml-2 max-w-[10ch] truncate">{file.name}</InputGroupText>
-                                )}
+                                {file && <InputGroupText className="ml-2 max-w-[10ch] truncate">{file.name}</InputGroupText>}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <InputGroupButton variant="ghost">Auto</InputGroupButton>
@@ -188,6 +210,7 @@ export default function Page() {
                                     size="icon-xs"
                                     onClick={trySend}
                                     title="Send"
+                                    disabled={loading}
                                 >
                                     <ArrowUpIcon />
                                     <span className="sr-only">Send</span>
