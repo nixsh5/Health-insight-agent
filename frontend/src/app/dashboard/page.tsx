@@ -88,7 +88,13 @@ export default function Page() {
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
             const page = await pdf.getPage(pageNum)
             const content = await page.getTextContent()
-            const strings = content.items.map((item: { str?: string }) => item.str || "")
+            // Use type assertion to handle TextItem and TextMarkedContent
+            const strings = content.items.map((item) => {
+                if ('str' in item) {
+                    return item.str
+                }
+                return ""
+            })
             fullText += strings.join(" ") + "\n"
         }
         return fullText.trim()
