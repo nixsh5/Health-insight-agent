@@ -84,8 +84,8 @@ export default function Page() {
 
         // Use the matching CDN worker for version 4.0.379
         const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs"
-        // @ts-ignore
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+
+            pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
         const arrayBuf = await pdfFile.arrayBuffer()
         const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise
