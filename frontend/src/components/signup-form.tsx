@@ -1,24 +1,23 @@
 "use client"
 
-import { z } from "zod"
+import {z} from "zod"
 import * as React from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { signupSchema } from "@/lib/schemas"
-import { cn } from "@/lib/utils"
+import {useForm} from "react-hook-form"
+import {zodResolver} from "@hookform/resolvers/zod"
+import {signupSchema} from "@/lib/schemas"
+import {cn} from "@/lib/utils"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import {useRouter} from "next/navigation"
+import {Button} from "@/components/ui/button"
+import {Card, CardContent} from "@/components/ui/card"
+import {Input} from "@/components/ui/input"
+import {Label} from "@/components/ui/label"
 import Image from "next/image"
 
 export type SignupData = z.infer<typeof signupSchema>
 
 type SignupOkDirect = { ok: true }               // cookie set; can go to dashboard
 type SignupOkNeedsLogin = { signedUp: true; needsLogin: true } // fallback
-type SignupSuccess = SignupOkDirect | SignupOkNeedsLogin
 type SignupError = { message?: string }
 
 function isNeedsLogin(payload: unknown): payload is SignupOkNeedsLogin {
