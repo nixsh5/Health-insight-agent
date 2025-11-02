@@ -28,6 +28,8 @@ import {
     InputGroupText,
 } from "@/components/ui/input-group"
 
+type ChatMessage = { role: "user" | "assistant"; content: string }
+
 export default function Page() {
     const { setTheme } = useTheme()
     const router = useRouter()
@@ -36,7 +38,9 @@ export default function Page() {
     const [file, setFile] = React.useState<File | null>(null)
     const [error, setError] = React.useState<string | null>(null)
     const [loading, setLoading] = React.useState(false)
-    const [responseText, setResponseText] = React.useState<string>("")
+
+    const [messages, setMessages] = React.useState<ChatMessage[]>([])
+    const scrollRef = React.useRef<HTMLDivElement>(null)
 
     const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -78,8 +82,10 @@ export default function Page() {
     async function extractPdfText(pdfFile: File): Promise<string> {
         const pdfjsLib = await import("pdfjs-dist")
 
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs"
+        // Use the matching CDN worker for version 4.0.379
+        const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs"
+        // @ts-ignore
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
         const arrayBuf = await pdfFile.arrayBuffer()
         const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise
@@ -88,16 +94,19 @@ export default function Page() {
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
             const page = await pdf.getPage(pageNum)
             const content = await page.getTextContent()
-            // Use type assertion to handle TextItem and TextMarkedContent
-            const strings = content.items.map((item) => {
-                if ('str' in item) {
-                    return item.str
-                }
-                return ""
-            })
+            const strings = content.items.map((item) => ("str" in item ? item.str : ""))
             fullText += strings.join(" ") + "\n"
         }
         return fullText.trim()
+    }
+
+
+
+    function pushMessage(msg: ChatMessage) {
+        setMessages((prev) => [...prev, msg])
+        setTimeout(() => {
+            scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
+        }, 0)
     }
 
     async function trySend() {
@@ -107,7 +116,9 @@ export default function Page() {
         }
         setError(null)
         setLoading(true)
-        setResponseText("")
+
+        const userText = text.trim()
+        pushMessage({ role: "user", content: userText || (file ? `Question about ${file.name}` : "") })
 
         try {
             let extracted = ""
@@ -118,12 +129,13 @@ export default function Page() {
             const resp = await fetch("/api/ai/chat-with-pdf", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: text.trim(), text: extracted }),
+                body: JSON.stringify({ query: userText, text: extracted }),
             })
 
             const data = await resp.json()
             if (!resp.ok) {
                 setError(data.message || "Request failed")
+                pushMessage({ role: "assistant", content: data.message || "Error: request failed." })
                 return
             }
 
@@ -131,17 +143,19 @@ export default function Page() {
                 typeof data === "string"
                     ? data
                     : Array.isArray(data)
-                        ? (data[0]?.generated_text || JSON.stringify(data))
+                        ? data[0]?.generated_text || JSON.stringify(data)
                         : data.generated_text || data.answer || JSON.stringify(data)
 
-            setResponseText(answer)
+            pushMessage({ role: "assistant", content: answer })
 
             setText("")
             setFile(null)
             if (fileInputRef.current) fileInputRef.current.value = ""
         } catch (e) {
-            const error = e as Error
-            setError(error.message || "Unexpected error")
+            const err = e as Error
+            const msg = err.message || "Unexpected error"
+            setError(msg)
+            pushMessage({ role: "assistant", content: `Error: ${msg}` })
         } finally {
             setLoading(false)
         }
@@ -183,13 +197,33 @@ export default function Page() {
                 </header>
 
                 <div className="flex-1 flex flex-col gap-4 p-4 pb-32 relative">
-                    {loading && <p className="text-sm text-muted-foreground">Processing...</p>}
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                    {responseText && (
-                        <div className="rounded-md border p-3 whitespace-pre-wrap">
-                            {responseText}
-                        </div>
-                    )}
+                    <div
+                        ref={scrollRef}
+                        className="flex-1 overflow-y-auto rounded-md border p-3 space-y-3 bg-background/60"
+                    >
+                        {messages.length === 0 && (
+                            <p className="text-sm text-muted-foreground">
+                                Ask a question or attach a PDF to start the conversation.
+                            </p>
+                        )}
+                        {messages.map((m, i) => (
+                            <div
+                                key={i}
+                                className={
+                                    m.role === "user"
+                                        ? "rounded-lg bg-primary/10 p-2"
+                                        : "rounded-lg bg-muted p-2"
+                                }
+                            >
+                                <span className="block text-xs uppercase tracking-wide text-muted-foreground mb-1">
+                                    {m.role}
+                                </span>
+                                <div className="whitespace-pre-wrap text-sm">{m.content}</div>
+                            </div>
+                        ))}
+                        {loading && <p className="text-xs text-muted-foreground">Processing...</p>}
+                        {error && <p className="text-xs text-red-600">{error}</p>}
+                    </div>
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 pb-4 flex justify-center pointer-events-none">
