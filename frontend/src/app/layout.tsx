@@ -18,14 +18,14 @@ export const metadata: Metadata = {
     description: "Solo fkin coded by NIX 🤘",
 }
 
-export default function RootLayout({children,}: Readonly<{
-    children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en" suppressHydrationWarning>
-        <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-
-            {children}
+        {/* Apply Geist font variables to body */}
+        <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        {children}
+        {/* Vercel Analytics loads once for the entire app */}
+        <Analytics />
         </body>
         </html>
     )
