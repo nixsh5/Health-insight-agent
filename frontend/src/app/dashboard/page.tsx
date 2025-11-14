@@ -17,7 +17,15 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    // Optional radio-style group if you prefer checkmarks:
+    // DropdownMenuRadioGroup,
+    // DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
 import { IconPlus } from "@tabler/icons-react"
 
 import {
@@ -29,6 +37,7 @@ import {
 } from "@/components/ui/input-group"
 
 type ChatMessage = { role: "user" | "assistant"; content: string }
+type Mode = "auto" | "agent 1" | "agent 2"
 
 export default function Page() {
     const { setTheme } = useTheme()
@@ -41,8 +50,10 @@ export default function Page() {
 
     const [messages, setMessages] = React.useState<ChatMessage[]>([])
     const scrollRef = React.useRef<HTMLDivElement>(null)
-
     const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+    // Controlled mode selector for the dropdown
+    const [mode, setMode] = React.useState<Mode>("auto")
 
     async function handleLogout() {
         await fetch("/api/logout", { method: "POST" })
@@ -81,11 +92,12 @@ export default function Page() {
 
     async function extractPdfText(pdfFile: File): Promise<string> {
         const pdfjsLib = await import("pdfjs-dist")
-
-        // Use the matching CDN worker for version 4.0.379
+        // Use a known-good, same-version CDN worker string to avoid type/version issues
         const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs"
-
-            pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+        // TS types for GlobalWorkerOptions are permissive in runtime; assign string URL
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-expect-error pdf.js expects a string URL here
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
         const arrayBuf = await pdfFile.arrayBuffer()
         const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise
@@ -99,8 +111,6 @@ export default function Page() {
         }
         return fullText.trim()
     }
-
-
 
     function pushMessage(msg: ChatMessage) {
         setMessages((prev) => [...prev, msg])
@@ -129,13 +139,14 @@ export default function Page() {
             const resp = await fetch("/api/ai/chat-with-pdf", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: userText, text: extracted }),
+                body: JSON.stringify({ query: userText, text: extracted, mode }),
             })
 
             const data = await resp.json()
             if (!resp.ok) {
-                setError(data.message || "Request failed")
-                pushMessage({ role: "assistant", content: data.message || "Error: request failed." })
+                const message = data?.message || "Request failed"
+                setError(message)
+                pushMessage({ role: "assistant", content: message })
                 return
             }
 
@@ -168,6 +179,8 @@ export default function Page() {
         }
     }
 
+    const modeLabel = mode.charAt(0).toUpperCase() + mode.slice(1)
+
     return (
         <SidebarProvider>
             <AppSidebar />
@@ -197,6 +210,7 @@ export default function Page() {
                 </header>
 
                 <div className="flex-1 flex flex-col gap-4 p-4 pb-32 relative">
+                    {/* Conversation panel */}
                     <div
                         ref={scrollRef}
                         className="flex-1 overflow-y-auto rounded-md border p-3 space-y-3 bg-background/60"
@@ -209,15 +223,11 @@ export default function Page() {
                         {messages.map((m, i) => (
                             <div
                                 key={i}
-                                className={
-                                    m.role === "user"
-                                        ? "rounded-lg bg-primary/10 p-2"
-                                        : "rounded-lg bg-muted p-2"
-                                }
+                                className={m.role === "user" ? "rounded-lg bg-primary/10 p-2" : "rounded-lg bg-muted p-2"}
                             >
-                                <span className="block text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                                    {m.role}
-                                </span>
+                <span className="block text-xs uppercase tracking-wide text-muted-foreground mb-1">
+                  {m.role}
+                </span>
                                 <div className="whitespace-pre-wrap text-sm">{m.content}</div>
                             </div>
                         ))}
@@ -254,17 +264,22 @@ export default function Page() {
                                     className="hidden"
                                     onChange={onFileChange}
                                 />
-                                {file && <InputGroupText className="ml-2 max-w-[10ch] truncate">{file.name}</InputGroupText>}
+                                {file && (
+                                    <InputGroupText className="ml-2 max-w-[10ch] truncate">{file.name}</InputGroupText>
+                                )}
+
+                                {/* Mode dropdown - controlled */}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <InputGroupButton variant="ghost">Auto</InputGroupButton>
+                                        <InputGroupButton variant="ghost">{modeLabel}</InputGroupButton>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent side="top" align="start" className="[--radius:0.95rem]">
-                                        <DropdownMenuItem>Auto</DropdownMenuItem>
-                                        <DropdownMenuItem>Agent</DropdownMenuItem>
-                                        <DropdownMenuItem>Manual</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setMode("auto")}>Auto</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setMode("agent 1")}>Agent 1</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setMode("agent 2")}>Agent 2</DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
+
                                 <Separator orientation="vertical" className="!h-4" />
                                 <InputGroupButton
                                     variant="default"
