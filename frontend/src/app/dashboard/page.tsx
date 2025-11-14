@@ -22,9 +22,6 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
-    // Optional radio-style group if you prefer checkmarks:
-    // DropdownMenuRadioGroup,
-    // DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu"
 import { IconPlus } from "@tabler/icons-react"
 
@@ -52,7 +49,6 @@ export default function Page() {
     const scrollRef = React.useRef<HTMLDivElement>(null)
     const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-    // Controlled mode selector for the dropdown
     const [mode, setMode] = React.useState<Mode>("auto")
 
     async function handleLogout() {
@@ -92,12 +88,11 @@ export default function Page() {
 
     async function extractPdfText(pdfFile: File): Promise<string> {
         const pdfjsLib = await import("pdfjs-dist")
-        // Use a known-good, same-version CDN worker string to avoid type/version issues
+
+        // Assign a string URL for the worker without ts comment directives
         const workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs"
-        // TS types for GlobalWorkerOptions are permissive in runtime; assign string URL
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-expect-error pdf.js expects a string URL here
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+            // pdf.js reads GlobalWorkerOptions at runtime; use a structural cast to allow the assignment
+        ;(pdfjsLib.GlobalWorkerOptions as unknown as { workerSrc: string }).workerSrc = workerSrc
 
         const arrayBuf = await pdfFile.arrayBuffer()
         const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise
@@ -210,7 +205,6 @@ export default function Page() {
                 </header>
 
                 <div className="flex-1 flex flex-col gap-4 p-4 pb-32 relative">
-                    {/* Conversation panel */}
                     <div
                         ref={scrollRef}
                         className="flex-1 overflow-y-auto rounded-md border p-3 space-y-3 bg-background/60"
@@ -264,11 +258,8 @@ export default function Page() {
                                     className="hidden"
                                     onChange={onFileChange}
                                 />
-                                {file && (
-                                    <InputGroupText className="ml-2 max-w-[10ch] truncate">{file.name}</InputGroupText>
-                                )}
+                                {file && <InputGroupText className="ml-2 max-w-[10ch] truncate">{file.name}</InputGroupText>}
 
-                                {/* Mode dropdown - controlled */}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <InputGroupButton variant="ghost">{modeLabel}</InputGroupButton>
