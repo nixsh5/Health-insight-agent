@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 
 export const runtime = "nodejs"
 
-
-const GOOGLE_FIT_REFRESH_TOKEN = "sbcddasdfdasfsc"
+// TEMP: your refresh token (move to DB/env per user later)
+const GOOGLE_FIT_REFRESH_TOKEN = "1//0gn0pDHZQj-NKCgYIARAAGBASNwF-L9IrFyWlQG6YTieMX9E6npzWzjdQeNgXoR88Uak932wFrv-WuXQGhvcfh0b5pksRvytm-Fo"
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
@@ -51,12 +51,15 @@ export async function GET(req: NextRequest) {
             )
         }
 
-        const tokenJson = await tokenResp.json() as { access_token: string }
+        const tokenJson = (await tokenResp.json()) as { access_token: string }
         const accessToken = tokenJson.access_token
 
         // 2) Call Google Fit aggregate endpoint for last 7 days
         const endNs = nowNs()
         const startNs = endNs - 7 * 24 * 60 * 60 * 1_000_000_000 // 7 days
+
+        const startTimeMillis = Math.floor(startNs / 1_000_000)
+        const endTimeMillis = Math.floor(endNs / 1_000_000)
 
         const aggResp = await fetch(
             "https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate",
@@ -68,12 +71,14 @@ export async function GET(req: NextRequest) {
                 },
                 body: JSON.stringify({
                     aggregateBy: [
-                        { dataTypeName: "com.google.step_count.delta" },
-                        { dataTypeName: "com.google.heart_rate.bpm" },
+                        { dataTypeName: "com.google.step_count.delta" },       // steps
+                        { dataTypeName: "com.google.heart_rate.bpm" },         // heart rate
+                        { dataTypeName: "com.google.calories.expended" },      // calories
+                        { dataTypeName: "com.google.active_minutes" },         // active / exercise minutes
                     ],
                     bucketByTime: { durationMillis: 24 * 60 * 60 * 1000 },
-                    startTimeMillis: Math.floor(startNs / 1_000_000),
-                    endTimeMillis: Math.floor(endNs / 1_000_000),
+                    startTimeMillis,
+                    endTimeMillis,
                 }),
             },
         )
@@ -89,12 +94,14 @@ export async function GET(req: NextRequest) {
 
         const aggJson = await aggResp.json()
 
-        // 3) Very simple summarization: total steps & avg heart rate per day
+        // 3) Build per‑day summary while still returning raw buckets
         const buckets: any[] = aggJson.bucket || []
         const days: Array<{
             date: string
             steps: number
             avgHr?: number
+            calories?: number
+            activeMinutes?: number
         }> = []
 
         for (const b of buckets) {
@@ -104,19 +111,25 @@ export async function GET(req: NextRequest) {
             let steps = 0
             let hrSum = 0
             let hrCount = 0
+            let calories = 0
+            let activeMinutes = 0
 
             for (const ds of b.dataset ?? []) {
+                const dataSourceId = ds.dataSourceId || ""
                 for (const p of ds.point ?? []) {
-                    const type = ds.dataSourceId || ""
                     const values = p.value || []
 
-                    if (type.includes("com.google.step_count.delta")) {
+                    if (dataSourceId.includes("com.google.step_count.delta")) {
                         if (values[0]?.intVal != null) steps += values[0].intVal
-                    } else if (type.includes("com.google.heart_rate.bpm")) {
+                    } else if (dataSourceId.includes("com.google.heart_rate.bpm")) {
                         if (values[0]?.fpVal != null) {
                             hrSum += values[0].fpVal
                             hrCount += 1
                         }
+                    } else if (dataSourceId.includes("com.google.calories.expended")) {
+                        if (values[0]?.fpVal != null) calories += values[0].fpVal
+                    } else if (dataSourceId.includes("com.google.active_minutes")) {
+                        if (values[0]?.intVal != null) activeMinutes += values[0].intVal
                     }
                 }
             }
@@ -125,10 +138,26 @@ export async function GET(req: NextRequest) {
                 date,
                 steps,
                 avgHr: hrCount ? hrSum / hrCount : undefined,
+                calories: calories || undefined,
+                activeMinutes: activeMinutes || undefined,
             })
         }
 
-        return NextResponse.json({ days })
+        // Optional: text summary if you want it
+        const totalSteps = days.reduce((s, d) => s + d.steps, 0)
+        const avgSteps = days.length ? Math.round(totalSteps / days.length) : 0
+        const summaryText =
+            `Last ${days.length} days: average ${avgSteps} steps/day. ` +
+            `Full daily stats (steps, heart rate, calories, active minutes) are in the 'days' array.`
+
+        // Return raw + summary so AI route can send "everything"
+        return NextResponse.json({
+            startTimeMillis,
+            endTimeMillis,
+            buckets,     // raw Google Fit aggregate response
+            days,        // cleaned per‑day summary
+            summaryText, // optional human-readable string
+        })
     } catch (e) {
         const err = e as Error
         console.error(err)
