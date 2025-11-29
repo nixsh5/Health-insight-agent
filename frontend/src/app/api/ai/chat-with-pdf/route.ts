@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-
+//h
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -10,7 +10,7 @@ const MODEL_AGENT_1 = "google/gemma-2-2b-it:nebius" // Agent 1 (HF)
 
 const LOCAL_OPENAI_BASE = process.env.LOCAL_OPENAI_BASE || "http://localhost:11434/v1"
 // Use your Ollama model/tag for Agent 2:
-const LOCAL_MODEL = process.env.LOCAL_MODEL || "deepseek-v2:latest"
+const LOCAL_MODEL = process.env.LOCAL_MODEL || "deepseek-r1:latest"
 
 /** AUTO heuristic; swap to random if preferred */
 function pickAuto(doc: string): "cloud" | "local" {
