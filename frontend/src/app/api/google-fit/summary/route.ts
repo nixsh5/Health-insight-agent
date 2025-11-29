@@ -2,19 +2,17 @@ import { NextRequest, NextResponse } from "next/server"
 
 export const runtime = "nodejs"
 
-// TEMP: your refresh token (move to DB/env per user later)
-const GOOGLE_FIT_REFRESH_TOKEN = "1//0gn0pDHZQj-NKCgYIARAAGBASNwF-L9IrFyWlQG6YTieMX9E6npzWzjdQeNgXoR88Uak932wFrv-WuXQGhvcfh0b5pksRvytm-Fo"
-
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 function nowNs() {
     return Date.now() * 1_000_000
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
     try {
         const clientId = process.env.GOOGLE_CLIENT_ID
         const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+        const refreshToken = process.env.GOOGLE_FIT_REFRESH_TOKEN
 
         if (!clientId || !clientSecret) {
             return NextResponse.json(
@@ -23,9 +21,9 @@ export async function GET(req: NextRequest) {
             )
         }
 
-        if (!GOOGLE_FIT_REFRESH_TOKEN) {
+        if (!refreshToken) {
             return NextResponse.json(
-                { message: "Missing Google Fit refresh token" },
+                { message: "Missing GOOGLE_FIT_REFRESH_TOKEN" },
                 { status: 500 },
             )
         }
@@ -37,7 +35,7 @@ export async function GET(req: NextRequest) {
             body: new URLSearchParams({
                 client_id: clientId,
                 client_secret: clientSecret,
-                refresh_token: GOOGLE_FIT_REFRESH_TOKEN,
+                refresh_token: refreshToken,
                 grant_type: "refresh_token",
             }),
         })
@@ -71,10 +69,10 @@ export async function GET(req: NextRequest) {
                 },
                 body: JSON.stringify({
                     aggregateBy: [
-                        { dataTypeName: "com.google.step_count.delta" },       // steps
-                        { dataTypeName: "com.google.heart_rate.bpm" },         // heart rate
-                        { dataTypeName: "com.google.calories.expended" },      // calories
-                        { dataTypeName: "com.google.active_minutes" },         // active / exercise minutes
+                        { dataTypeName: "com.google.step_count.delta" },
+                        { dataTypeName: "com.google.heart_rate.bpm" },
+                        { dataTypeName: "com.google.calories.expended" },
+                        { dataTypeName: "com.google.active_minutes" },
                     ],
                     bucketByTime: { durationMillis: 24 * 60 * 60 * 1000 },
                     startTimeMillis,
@@ -94,7 +92,6 @@ export async function GET(req: NextRequest) {
 
         const aggJson = await aggResp.json()
 
-        // 3) Build per‑day summary while still returning raw buckets
         const buckets: any[] = aggJson.bucket || []
         const days: Array<{
             date: string
@@ -143,20 +140,18 @@ export async function GET(req: NextRequest) {
             })
         }
 
-        // Optional: text summary if you want it
         const totalSteps = days.reduce((s, d) => s + d.steps, 0)
         const avgSteps = days.length ? Math.round(totalSteps / days.length) : 0
         const summaryText =
             `Last ${days.length} days: average ${avgSteps} steps/day. ` +
             `Full daily stats (steps, heart rate, calories, active minutes) are in the 'days' array.`
 
-        // Return raw + summary so AI route can send "everything"
         return NextResponse.json({
             startTimeMillis,
             endTimeMillis,
-            buckets,     // raw Google Fit aggregate response
-            days,        // cleaned per‑day summary
-            summaryText, // optional human-readable string
+            buckets,
+            days,
+            summaryText,
         })
     } catch (e) {
         const err = e as Error

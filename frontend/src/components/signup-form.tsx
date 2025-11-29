@@ -18,7 +18,7 @@ export type SignupData = z.infer<typeof signupSchema>
 
 type SignupOkDirect = { ok: true }               // cookie set; can go to dashboard
 type SignupOkNeedsLogin = { signedUp: true; needsLogin: true } // fallback
-type SignupSuccess = SignupOkDirect | SignupOkNeedsLogin
+//type SignupSuccess = SignupOkDirect | SignupOkNeedsLogin
 type SignupError = { message?: string }
 
 function isNeedsLogin(payload: unknown): payload is SignupOkNeedsLogin {

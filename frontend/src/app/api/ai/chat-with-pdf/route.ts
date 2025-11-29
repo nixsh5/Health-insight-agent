@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server"
-//h
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type Mode = "auto" | "agent 1" | "agent 2"
 
-const HF_ENDPOINT = "https://router.huggingface.co/v1/chat/completions"
 const MODEL_AGENT_1 = "google/gemma-2-2b-it:nebius" // Agent 1 (HF)
 
 const LOCAL_OPENAI_BASE = process.env.LOCAL_OPENAI_BASE || "http://localhost:11434/v1"
-// Use your Ollama model/tag for Agent 2:
 const LOCAL_MODEL = process.env.LOCAL_MODEL || "deepseek-r1:latest"
 
 /** AUTO heuristic; swap to random if preferred */
@@ -27,9 +25,51 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Missing query" }, { status: 400 })
         }
 
-        const docSnippet = (text ?? "").slice(0, 20000)
-        const userMessage = docSnippet ? `Document content:\n${docSnippet}\n\nQuestion: ${query}` : query
+        // 1) Always try to fetch Google Fit data
+        let fitContext = ""
+        try {
+            const base =
+                process.env.NEXT_PUBLIC_BASE_URL ??
+                "http://localhost:3000" // adjust if different in prod
 
+            const fitResp = await fetch(`${base}/api/google-fit/summary`, {
+                method: "GET",
+                headers: { "Content-Type": "application/json" },
+            })
+
+            if (fitResp.ok) {
+                const fitJson = await fitResp.json()
+                const days = (fitJson.days as Array<{ date: string; steps: number }> | undefined) ?? []
+                const today = days[days.length - 1]
+
+                const totalSteps = days.reduce((s, d) => s + (d.steps || 0), 0)
+                const avgSteps = days.length ? Math.round(totalSteps / days.length) : 0
+
+                fitContext =
+                    `Google Fit summary (for this user):\n` +
+                    `- Days covered: ${days.length}\n` +
+                    (today ? `- Today (${today.date}) steps: ${today.steps}\n` : "") +
+                    `- Average steps per day: ${avgSteps}\n\n` +
+                    `Use these exact numbers when answering questions about steps, activity, or daily movement.`
+            } else {
+                console.error("Google Fit summary error", fitResp.status)
+            }
+        } catch (e) {
+            console.error("Failed to fetch Google Fit data", e)
+        }
+
+        // 2) Build user message (always include fitContext when present)
+        const docSnippet = (text ?? "").slice(0, 20000)
+
+        const coreQuestion = docSnippet
+            ? `Document content:\n${docSnippet}\n\nQuestion: ${query}`
+            : query
+
+        const userMessage = fitContext
+            ? `${fitContext}\n\nUser question: ${coreQuestion}`
+            : coreQuestion
+
+        // 3) Decide target (cloud/local)
         let target: "cloud" | "local"
         if (mode === "agent 1") target = "cloud"
         else if (mode === "agent 2") target = "local"
@@ -60,7 +100,10 @@ export async function POST(req: Request) {
             if (!resp.ok) {
                 const t = await resp.text().catch(() => "")
                 console.error("HF Router chat completions failed", { status: resp.status, body: t })
-                return NextResponse.json({ message: "AI API error: " + (t || resp.statusText) }, { status: 502 })
+                return NextResponse.json(
+                    { message: "AI API error: " + (t || resp.statusText) },
+                    { status: 502 },
+                )
             }
 
             const data = (await resp.json()) as {
@@ -76,10 +119,16 @@ export async function POST(req: Request) {
                 data?.answer ??
                 ""
 
-            return NextResponse.json({ generated_text: answer, model: MODEL_AGENT_1, mode: mode ?? "auto", target })
+            return NextResponse.json({
+                generated_text: answer,
+                model: MODEL_AGENT_1,
+                mode: mode ?? "auto",
+                target,
+                usedFitData: !!fitContext,
+            })
         }
 
-        // target === "local" → Ollama OpenAI-compatible endpoint
+        // 4) Local (Ollama) path – Agent 2
         const localPayload = {
             model: LOCAL_MODEL,
             messages: [{ role: "user", content: userMessage }],
@@ -96,7 +145,10 @@ export async function POST(req: Request) {
         if (!localResp.ok) {
             const t = await localResp.text().catch(() => "")
             console.error("Local model error", { status: localResp.status, body: t })
-            return NextResponse.json({ message: "Local AI error: " + (t || localResp.statusText) }, { status: 502 })
+            return NextResponse.json(
+                { message: "Local AI error: " + (t || localResp.statusText) },
+                { status: 502 },
+            )
         }
 
         const localData = (await localResp.json()) as {
@@ -110,10 +162,14 @@ export async function POST(req: Request) {
             model: LOCAL_MODEL,
             mode: mode ?? "auto",
             target: "local",
+            usedFitData: !!fitContext,
         })
     } catch (err) {
         const error = err as Error
         console.error(error)
-        return NextResponse.json({ message: error?.message || "Internal Server Error" }, { status: 500 })
+        return NextResponse.json(
+            { message: error?.message || "Internal Server Error" },
+            { status: 500 },
+        )
     }
 }
