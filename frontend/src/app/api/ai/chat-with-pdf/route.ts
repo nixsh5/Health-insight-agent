@@ -4,7 +4,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type Mode = "auto" | "agent 1" | "agent 2"
-
+//
 const MODEL_AGENT_1 = "google/gemma-2-2b-it:nebius" // Agent 1 (HF)
 
 const LOCAL_OPENAI_BASE = process.env.LOCAL_OPENAI_BASE || "http://localhost:11434/v1"
