@@ -7,6 +7,7 @@ import {
 import { deriveRisks } from "@/lib/risk-agent"
 import { runFederatedRound } from "@/lib/federated-stub"
 import { assessDataQuality } from "@/lib/data-quality-agent"
+import { historyFromFit } from "@/lib/fit-adapter"
 import { calculateConformalScores } from "@/lib/conformal-agent"
 
 const LOCAL_OPENAI_BASE =
@@ -21,20 +22,51 @@ export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url)
         const scenario = searchParams.get("scenario") ?? "normal"
+        const source = searchParams.get("source") ?? "synthetic" // "synthetic" | "fit"
 
-        // 1) Generate synthetic N-of-1 history
-        const history = generateSyntheticHistory(60, 123)
+        let history
 
-        // Apply scenario to today's values
-        const today = history[history.length - 1]
-        if (scenario === "low-steps") {
-            today.steps = Math.round(today.steps * 0.4)
-        } else if (scenario === "low-sleep") {
-            today.sleepHours = Math.max(3, today.sleepHours - 3)
-        } else if (scenario === "stress") {
-            today.restingHr += 8
-            today.hrv = Math.max(20, today.hrv - 15)
+        // 1) Build history, either from synthetic generator or Google Fit
+        if (source === "fit") {
+            const base =
+                process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
+
+            const fitResp = await fetch(`${base}/api/google-fit/summary`)
+            if (!fitResp.ok) {
+                const t = await fitResp.text().catch(() => "")
+                console.error("Google Fit summary error", fitResp.status, t)
+                return NextResponse.json(
+                    { message: "Failed to fetch Google Fit data" },
+                    { status: 502 },
+                )
+            }
+
+            const fitJson = await fitResp.json()
+            // assumes fitJson.days is array with date, steps, restingHr, hrv, sleepHours
+            history = historyFromFit(fitJson.days || [])
+
+            if (history.length < 3) {
+                return NextResponse.json(
+                    { message: "No sufficient Google Fit history available" },
+                    { status: 400 },
+                )
+            }
+        } else {
+            history = generateSyntheticHistory(60, 123)
+
+            // Apply scenario only for synthetic source
+            const today = history[history.length - 1]
+            if (scenario === "low-steps") {
+                today.steps = Math.round(today.steps * 0.4)
+            } else if (scenario === "low-sleep") {
+                today.sleepHours = Math.max(3, today.sleepHours - 3)
+            } else if (scenario === "stress") {
+                today.restingHr += 8
+                today.hrv = Math.max(20, today.hrv - 15)
+            }
         }
+
+        const today = history[history.length - 1]
 
         // 2) DataQualityAgent
         const dataQuality = assessDataQuality(history)
@@ -87,9 +119,12 @@ export async function GET(req: Request) {
         // 7) CoachAgent (LLM)
         const prompt =
             `You are a health coach.\n` +
+            `Source: ${source}.\n` +
             `Scenario: ${scenario}.\n` +
             `Data-quality score: ${dataQuality.qualityScore.toFixed(2)}.\n` +
-            `User has 60 days of synthetic wearable data (steps, sleep, HRV, resting HR).\n` +
+            `User has ${history.length} days of ${
+                source === "fit" ? "Google Fit" : "synthetic"
+            } wearable data (steps, sleep, HRV, resting HR).\n` +
             `Today: steps=${today.steps}, sleep=${today.sleepHours}h, HRV=${today.hrv}, resting HR=${today.restingHr}.\n` +
             `Baselines and deviations:\n` +
             JSON.stringify(deviations, null, 2) +
@@ -108,26 +143,22 @@ export async function GET(req: Request) {
 
         let coachingText = ""
         try {
-            const resp = await fetch(
-                `${LOCAL_OPENAI_BASE}/chat/completions`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        model: LOCAL_MODEL,
-                        messages: [{ role: "user", content: prompt }],
-                        max_tokens: 300,
-                        temperature: 0.7,
-                    }),
-                },
-            )
+            const resp = await fetch(`${LOCAL_OPENAI_BASE}/chat/completions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: LOCAL_MODEL,
+                    messages: [{ role: "user", content: prompt }],
+                    max_tokens: 300,
+                    temperature: 0.7,
+                }),
+            })
 
             if (resp.ok) {
                 const data = (await resp.json()) as {
                     choices?: Array<{ message?: { content?: string } }>
                 }
-                coachingText =
-                    data?.choices?.[0]?.message?.content ?? ""
+                coachingText = data?.choices?.[0]?.message?.content ?? ""
             } else {
                 console.error("Local coach model error", resp.status)
             }
@@ -136,6 +167,7 @@ export async function GET(req: Request) {
         }
 
         return NextResponse.json({
+            source,
             scenario,
             history,
             dataQuality,

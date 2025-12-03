@@ -40,22 +40,54 @@ export function generateSyntheticHistory(days = 60, seed = 42): SyntheticDay[] {
 
     const today = new Date()
 
+    // Choose a base activity profile per user
+    const activityProfile = rand() // 0–1
+    const baseStepsLevel =
+        activityProfile < 0.33 ? 7000 : activityProfile < 0.66 ? 10000 : 13000
+
+    // Pick a 7–10 day "fatigue window" somewhere in the last 30 days
+    const fatigueWindowLength = 7 + Math.floor(rand() * 4)
+    const fatigueWindowStart = 20 + Math.floor(rand() * 10) // around day 20–30
+
     for (let i = days - 1; i >= 0; i--) {
         const d = new Date(today)
         d.setDate(today.getDate() - i)
         const date = d.toISOString().slice(0, 10)
 
-        // base patterns
-        const stepsBase = 9000 + rand() * 2000 // 9k–11k
-        const hrBase = 62 + rand() * 6 // 62–68
-        const hrvBase = 70 + rand() * 15 // 70–85 ms
-        const sleepBase = 6.5 + rand() * 2 // 6.5–8.5h
+        // Weekly pattern: lower activity on 1–2 "rest" days
+        const dayOfWeek = d.getDay()
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
 
-        // small noise day‑to‑day
-        const steps = Math.round(stepsBase + (rand() - 0.5) * 1500)
-        const restingHr = Math.round(hrBase + (rand() - 0.5) * 4)
-        const hrv = Math.round(hrvBase + (rand() - 0.5) * 10)
-        const sleepHours = parseFloat((sleepBase + (rand() - 0.5) * 1).toFixed(1))
+        // Base values
+        let stepsBase = baseStepsLevel + (rand() - 0.5) * 2000
+        let hrBase = 62 + rand() * 6
+        let hrvBase = 75 + rand() * 12
+        let sleepBase = 7 + (isWeekend ? 0.5 : 0) + (rand() - 0.5) * 1.2
+
+        // Apply fatigue window: cluster of bad days
+        const dayIndex = days - 1 - i
+        const inFatigue =
+            dayIndex >= fatigueWindowStart &&
+            dayIndex < fatigueWindowStart + fatigueWindowLength
+
+        if (inFatigue) {
+            stepsBase *= 0.6 // 40% drop
+            sleepBase -= 1.0
+            hrBase += 5
+            hrvBase -= 8
+        }
+
+        // Occasional random bad night (independent of window)
+        if (rand() < 0.1) {
+            sleepBase -= 1.5
+            hrBase += 3
+            hrvBase -= 5
+        }
+
+        const steps = Math.round(Math.max(1000, stepsBase))
+        const restingHr = Math.round(Math.max(45, hrBase))
+        const hrv = Math.round(Math.max(20, hrvBase))
+        const sleepHours = parseFloat(Math.max(3.5, sleepBase).toFixed(1))
 
         out.push({ date, steps, restingHr, hrv, sleepHours })
     }

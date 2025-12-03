@@ -17,6 +17,12 @@ type RiskItem = {
     reason: string
 }
 
+type ConformalScore = {
+    metric: string
+    confidence: number
+    interval: [number, number]
+}
+
 export function HealthAgentCard() {
     const [loading, setLoading] = useState(false)
     const [deviations, setDeviations] = useState<DeviationSummary[]>([])
@@ -24,6 +30,8 @@ export function HealthAgentCard() {
     const [coach, setCoach] = useState("")
     const [ranOnce, setRanOnce] = useState(false)
     const [scenario, setScenario] = useState<"normal" | "low-steps" | "low-sleep" | "stress">("normal")
+    const [confidence, setConfidence] = useState<ConformalScore[]>([])
+    const [source, setSource] = useState<"synthetic" | "fit">("synthetic")
 
     async function runAgent(nextScenario?: "normal" | "low-steps" | "low-sleep" | "stress") {
         const chosen = nextScenario ?? scenario
@@ -31,12 +39,13 @@ export function HealthAgentCard() {
         setLoading(true)
         setRanOnce(true)
         try {
-            const resp = await fetch(`/api/health-agent/run?scenario=${chosen}`)
+            const resp = await fetch(`/api/health-agent/run?scenario=${chosen}&source=${source}`)
             if (resp.ok) {
                 const json = await resp.json()
                 setDeviations(json.deviations || [])
                 setRisks(json.risks || [])
                 setCoach(json.coachingText || "")
+                setConfidence(json.confidence || [])
             }
         } finally {
             setLoading(false)
@@ -54,28 +63,60 @@ export function HealthAgentCard() {
                     {loading ? "Running..." : ranOnce ? "Re-run Agent" : "Check Health Status"}
                 </button>
 
+                {/* Source toggle */}
+                <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground">Source</span>
+                    <div className="space-x-1">
+                        <button
+                            onClick={() => setSource("synthetic")}
+                            className={`px-2 py-1 rounded border ${
+                                source === "synthetic" ? "bg-primary/10" : ""
+                            }`}
+                        >
+                            Synthetic
+                        </button>
+                        <button
+                            onClick={() => setSource("fit")}
+                            className={`px-2 py-1 rounded border ${
+                                source === "fit" ? "bg-primary/10" : ""
+                            }`}
+                        >
+                            Google Fit
+                        </button>
+                    </div>
+                </div>
+
+                {/* Scenario chips (only really meaningful for synthetic, but safe for both) */}
                 <div className="flex flex-wrap gap-1 text-[10px]">
                     <button
                         onClick={() => runAgent("normal")}
-                        className={`px-2 py-1 rounded border ${scenario === "normal" ? "bg-primary/10" : ""}`}
+                        className={`px-2 py-1 rounded border ${
+                            scenario === "normal" ? "bg-primary/10" : ""
+                        }`}
                     >
                         Normal
                     </button>
                     <button
                         onClick={() => runAgent("low-steps")}
-                        className={`px-2 py-1 rounded border ${scenario === "low-steps" ? "bg-primary/10" : ""}`}
+                        className={`px-2 py-1 rounded border ${
+                            scenario === "low-steps" ? "bg-primary/10" : ""
+                        }`}
                     >
                         Low steps
                     </button>
                     <button
                         onClick={() => runAgent("low-sleep")}
-                        className={`px-2 py-1 rounded border ${scenario === "low-sleep" ? "bg-primary/10" : ""}`}
+                        className={`px-2 py-1 rounded border ${
+                            scenario === "low-sleep" ? "bg-primary/10" : ""
+                        }`}
                     >
                         Low sleep
                     </button>
                     <button
                         onClick={() => runAgent("stress")}
-                        className={`px-2 py-1 rounded border ${scenario === "stress" ? "bg-primary/10" : ""}`}
+                        className={`px-2 py-1 rounded border ${
+                            scenario === "stress" ? "bg-primary/10" : ""
+                        }`}
                     >
                         Stress
                     </button>
@@ -90,22 +131,32 @@ export function HealthAgentCard() {
                             <div className="space-y-1">
                                 {deviations
                                     .filter((d) => d.flag !== "ok")
-                                    .map((d) => (
-                                        <div key={d.metric} className="flex justify-between">
-                                            <span>{d.metric}</span>
-                                            <span
-                                                className={
-                                                    d.flag === "low"
-                                                        ? "text-red-500"
-                                                        : d.flag === "high"
-                                                            ? "text-orange-500"
-                                                            : ""
-                                                }
-                                            >
-                        {d.pctOfBaseline.toFixed(0)}% ({d.flag})
-                      </span>
-                                        </div>
-                                    ))}
+                                    .map((d) => {
+                                        const conf = confidence.find((c) => c.metric === d.metric)
+                                        return (
+                                            <div key={d.metric} className="flex justify-between items-center">
+                                                <span>{d.metric}</span>
+                                                <div className="text-right">
+                          <span
+                              className={
+                                  d.flag === "low"
+                                      ? "text-red-500"
+                                      : d.flag === "high"
+                                          ? "text-orange-500"
+                                          : ""
+                              }
+                          >
+                            {d.pctOfBaseline.toFixed(0)}% ({d.flag})
+                          </span>
+                                                    {conf && (
+                                                        <span className="ml-2 text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-600">
+                              {(conf.confidence * 100).toFixed(0)}% conf
+                            </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
                                 {deviations.every((d) => d.flag === "ok") && (
                                     <div className="text-muted-foreground">All metrics normal</div>
                                 )}
