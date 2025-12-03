@@ -6,76 +6,128 @@ import {
 } from "@/lib/synthetic-health"
 import { deriveRisks } from "@/lib/risk-agent"
 import { runFederatedRound } from "@/lib/federated-stub"
-// If you want to add uncertainty scores, also import conformal-agent:
-// import { calculateConformalScores } from "@/lib/conformal-agent"
+import { assessDataQuality } from "@/lib/data-quality-agent"
+import { calculateConformalScores } from "@/lib/conformal-agent"
 
-const LOCAL_OPENAI_BASE = process.env.LOCAL_OPENAI_BASE || "http://localhost:11434/v1"
-const LOCAL_MODEL = process.env.LOCAL_MODEL || "deepseek-r1:latest"
+const LOCAL_OPENAI_BASE =
+    process.env.LOCAL_OPENAI_BASE || "http://localhost:11434/v1"
+const LOCAL_MODEL =
+    process.env.LOCAL_MODEL || "deepseek-r1:latest"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
-        // 1. User's synthetic personalized stats
+        const { searchParams } = new URL(req.url)
+        const scenario = searchParams.get("scenario") ?? "normal"
+
+        // 1) Generate synthetic N-of-1 history
         const history = generateSyntheticHistory(60, 123)
+
+        // Apply scenario to today's values
+        const today = history[history.length - 1]
+        if (scenario === "low-steps") {
+            today.steps = Math.round(today.steps * 0.4)
+        } else if (scenario === "low-sleep") {
+            today.sleepHours = Math.max(3, today.sleepHours - 3)
+        } else if (scenario === "stress") {
+            today.restingHr += 8
+            today.hrv = Math.max(20, today.hrv - 15)
+        }
+
+        // 2) DataQualityAgent
+        const dataQuality = assessDataQuality(history)
+
+        // 3) DeviationAgent
         const baselines = computeBaselines(history)
         const deviations = computeDeviations(history, baselines)
+
+        // 4) RiskAgent
         const risks = deriveRisks(deviations)
 
-        // 2. Federated round with other "synthetic users"
-        const federatedState = runFederatedRound(10) // Simulate 10 clients
+        // 5) ConformalAgent (uncertainty)
+        const confidence = calculateConformalScores(deviations)
+
+        // 6) Federated stub
+        const federatedState = runFederatedRound(10)
         const globalModel = federatedState.globalModel
 
-        // 3. Federated context for prompt
-        const stepsPersonal = baselines.find(b => b.metric === "steps")?.mean || 0
-        const stepsGlobal = globalModel.find(b => b.metric === "steps")?.mean || 0
+        const stepsPersonal =
+            baselines.find((b) => b.metric === "steps")?.mean || 0
+        const stepsGlobal =
+            globalModel.find((b) => b.metric === "steps")?.mean || 0
 
-        const fedNote = `\n\nFEDERATED CONTEXT: User's baseline steps (${Math.round(stepsPersonal)}) compared to Global Federated Average (${Math.round(stepsGlobal)}). User is ${stepsPersonal > stepsGlobal ? "above" : "below"} average peer activity.`
+        const fedNote =
+            `\n\nFEDERATED CONTEXT: User's baseline steps (${Math.round(
+                stepsPersonal,
+            )}) vs Global Federated Average (${Math.round(
+                stepsGlobal,
+            )}). User is ${
+                stepsPersonal > stepsGlobal ? "above" : "below"
+            } peer activity.`
 
-        // (OPTIONAL) If uncertainty/conformal agent added:
-        // const confidence = calculateConformalScores(deviations);
-        // const lowConfidenceMetrics = confidence.filter(c => c.confidence < 0.6).map(c => c.metric).join(", ")
-        // const calibrationNote = lowConfidenceMetrics
-        //   ? `\n\nUNCERTAINTY WARNING: Data for [${lowConfidenceMetrics}] is highly variable. Express lower confidence in these insights.`
-        //   : `\n\nCONFIDENCE: Data quality is high and stable.`
+        const lowConfMetrics = confidence
+            .filter((c) => c.confidence < 0.6)
+            .map((c) => c.metric)
+        const calibrationNote =
+            lowConfMetrics.length > 0
+                ? `\n\nUNCERTAINTY: Metrics with noisy history [${lowConfMetrics.join(
+                    ", ",
+                )}] have lower confidence; consider these insights softer.`
+                : `\n\nCONFIDENCE: Historical data is stable; insights are high confidence.`
 
-        // 4. Prompt for coach model includes federated comparison
-        const today = history[history.length - 1]
+        const qualityNote =
+            dataQuality.qualityScore < 0.7
+                ? `\n\nDATA QUALITY WARNING: ${dataQuality.issues
+                    .map((i) => i.message)
+                    .join(" ")}`
+                : ""
+
+        // 7) CoachAgent (LLM)
         const prompt =
             `You are a health coach.\n` +
+            `Scenario: ${scenario}.\n` +
+            `Data-quality score: ${dataQuality.qualityScore.toFixed(2)}.\n` +
             `User has 60 days of synthetic wearable data (steps, sleep, HRV, resting HR).\n` +
             `Today: steps=${today.steps}, sleep=${today.sleepHours}h, HRV=${today.hrv}, resting HR=${today.restingHr}.\n` +
             `Baselines and deviations:\n` +
             JSON.stringify(deviations, null, 2) +
             `\n\nDerived risks:\n` +
             JSON.stringify(risks, null, 2) +
+            `\n\nConformal confidence scores:\n` +
+            JSON.stringify(confidence, null, 2) +
             fedNote +
-            // (OPTIONAL) + calibrationNote
+            calibrationNote +
+            qualityNote +
             `\n\nExplain in simple language:\n` +
             `1) What looks normal vs different today.\n` +
-            `2) The 1–2 most important risks (if any).\n` +
-            `3) 3 concrete but safe lifestyle tips for the next 24 hours.\n`
+            `2) The 1–2 most important risks (if any) and how confident you are.\n` +
+            `3) 3 concrete but safe lifestyle tips for the next 24 hours.\n` +
+            `If confidence or data quality is low, say that clearly and be conservative.`
 
         let coachingText = ""
-
         try {
-            const resp = await fetch(`${LOCAL_OPENAI_BASE}/chat/completions`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: LOCAL_MODEL,
-                    messages: [{ role: "user", content: prompt }],
-                    max_tokens: 300,
-                    temperature: 0.7,
-                }),
-            })
+            const resp = await fetch(
+                `${LOCAL_OPENAI_BASE}/chat/completions`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: LOCAL_MODEL,
+                        messages: [{ role: "user", content: prompt }],
+                        max_tokens: 300,
+                        temperature: 0.7,
+                    }),
+                },
+            )
 
             if (resp.ok) {
                 const data = (await resp.json()) as {
                     choices?: Array<{ message?: { content?: string } }>
                 }
-                coachingText = data?.choices?.[0]?.message?.content ?? ""
+                coachingText =
+                    data?.choices?.[0]?.message?.content ?? ""
             } else {
                 console.error("Local coach model error", resp.status)
             }
@@ -83,18 +135,19 @@ export async function GET() {
             console.error("Local model call failed", e)
         }
 
-        // 5. Return everything for frontend display
         return NextResponse.json({
+            scenario,
             history,
+            dataQuality,
             baselines,
             deviations,
             risks,
+            confidence,
             coachingText,
             federated: {
                 globalModel,
-                participatingClients: federatedState.clientsParticipated
-            }
-            // (OPTIONAL) , confidence
+                participatingClients: federatedState.clientsParticipated,
+            },
         })
     } catch (e) {
         const err = e as Error
